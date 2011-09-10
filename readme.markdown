@@ -33,7 +33,174 @@ Here's why you should use Lounge:
 * Easy to isolate your Javascript and unit-test it
 
 
-## Getting started: Documents
+## Getting started: configuring database / server connectivity
+
+By default, `Loung` assumes a Rails 3 app, and will detect your app's environment via `Rails.env`. If you're using this in something other than a Rails 3 app,
+then simply override the default environment detection:
+
+```ruby
+# Sinatra example
+Lounge::Config.edit do
+  environment do
+    settings.environment
+  end
+end
+
+# Rack example
+Lounge::Config.edit do
+  environment do
+    ENV['RACK_ENV'] || 'development'
+  end
+end
+```
+
+### Configuring the default database
+
+Suppose you want all of your lounge document models to use the same database in your application. No problem! You can use the `database` configuration method without
+any arguments:
+
+```ruby
+Lounge::Config.edit do
+  database do
+    default "my_db_#{Rails.env}"
+  end
+end
+```
+
+This means that the default database name for all of your models will be "my_db_" followed by your Rails environment.
+
+You could customize the database names per environment further:
+
+```ruby
+Lounge::Config.edit do
+  database do
+    default    "my_db_#{Rails.env}"
+    production "my_production_db"
+    test       "funny_test_db_name"
+  end
+end
+```
+
+For any environment not explicitly configured, it will fall back to the database name.
+
+### Configuring the database for a model
+
+To set the database for a model, use the `database` method. For example, suppose we'd like to set the database name for our `Book` document model to 
+`library` in all environments:
+
+```ruby
+Lounge::Config.edit do
+  database Book do
+    default "library"
+  end
+end
+```
+
+Or, perhaps we'd like to differentiate the name between production, development, and test environments:
+
+```ruby
+Lounge::Config.edit do
+  database Book do
+    production "library_production"
+    development "library_development"
+    test "library_test"
+  end
+end
+```
+
+In a Rails app, this could be simplified to:
+
+```ruby
+Lounge::Config.edit do
+  database Book do
+    default "library_#{Rails.env}"
+  end
+end
+```
+
+### Configuring the database for a set of models
+
+Similarly, you could set the database for a whole set of models in one of two ways:
+
+1. Make every model inherit from the same parent (or mixin the same module), and set the parent's database via the `database` method
+2. Pass several models to the `database` method
+
+### Inheritance / Mixins
+
+Let's imagine that our `Book`, `Author`, and `Genre` models all mixed in the `Library` module:
+
+```ruby
+module Library; end
+class Book   ; include Lounge::Document; include Library; end
+class Author ; include Lounge::Document; include Library; end
+class Genre  ; include Lounge::Document; include Library; end
+```
+
+To make the `Book`, `Author`, and `Genre` models use the same database, simply set the `Library` database in the config:
+
+```ruby
+Lounge::Config.edit do
+  database Library do
+    default "library"
+  end
+end
+```
+
+Now, the database for `Book`, `Author`, and `Genre` will all be set to the same database, "library".
+
+### Passing several models to the `database` method
+
+Suppose `Book`, `Author`, and `Genre` couldn't all share the same ancestor, yet we'd still like all of them to share the same database;
+then we could simply pass all of the models to the `database` method:
+
+```ruby
+Lounge::Config.edit do
+  database Book, Author, Genre do
+    default "library"
+  end
+end
+```
+
+### Configuring the CouchDB server 
+
+Without any configuration, Lounge::Config will assume a CouchDB server at "http://127.0.0.1:5984". 
+
+If you'd like to set a default server for all models regardless of environment, then try:
+
+```ruby
+Lounge::Config.edit do
+  server do
+    default "http://admin:password@localhost:5984"
+  end
+end
+```
+
+If you wanted to change the server to be different in the `production` environment:
+
+```ruby
+Lounge::Config.edit do
+  server do
+    default    "http://admin:password@localhost:5984"
+    production "https://root:blah@my.production.server:5984"
+  end
+end
+```
+
+Now, in the production environment, it will connect to CouchDB server `my.production.server`; in all other environments, it will connect to `localhost`.
+
+If you'd like to change the CouchDB server for a specific model or set of models, simply set the database name for the model (or models) to the entire
+CouchDB uri for the database:
+
+```ruby
+Lounge::Config.edit do
+  database Blog do
+    default "http://localhost:5984/blog"
+  end
+end
+```
+
+
+## Creating document models with Lounge::Document 
 
 CouchDB databases are just collections of documents. There are two types of documents: 
 
@@ -54,24 +221,6 @@ We can now create an article:
 
 ```ruby
 article = Article.create :title => "Lounge: CouchDB abstractions for Ruby"
-```
-
-### Configuring database connectivity
-
-By default, `Lounge` will attempt to connect to a CouchDB database running on `localhost`, port `5984`. It will also, by default, store documents in a database named after the class in which `Lounge::Document` is included. Thus, `Lounge` just created a database called `article` at `http://localhost:5984/article`, and then placed an article document in it titled "Lounge: CouchDB abstractions for Ruby"
-
-You can configure what database your documents get stored in through the `config` method on `Lounge::Database`:
-
-```ruby
-Lounge::Database.config do
-  server do
-    default "http://localhost:5984"
-  end
-
-  database do
-    default "content"
-  end
-end
 ```
 
 ### Adding properties to your documents
@@ -113,11 +262,11 @@ article.id
 At it's most basic level, CouchDB is a key/value store. The key is the id of a document, and the value returned is the document itself. You can retrieve a document by it's ID by calling the `get` method on your model:
 
 ```ruby
-Article.create :id => "couchr-ruby-library-for-couchdb"
+Article.create :id => "lounge-ruby-library-for-couchdb"
 
-a = Article.get "couchr-ruby-library-for-couchdb"
+a = Article.get "lounge-ruby-library-for-couchdb"
 
-a.id.should == "couchr-ruby-library-for-couchdb"
+a.id.should == "lounge-ruby-library-for-couchdb"
 ```
 
 To help ease the transition from other CouchDB libraries, and to add familiarity for those transitioning from ActiveRecord, you can alterantively use the `find` method. It's simply an alias for `get`:
@@ -151,7 +300,7 @@ This will generate a design document, `_design/Article`, with a view called "by_
 
 ```javascript
 function(doc){
-  if (doc.couchr_type == 'Article')
+  if (doc.lounge_type == 'Article')
     emit(doc.created_at, null)
 }
 ```
@@ -214,7 +363,7 @@ This will generate a view within the `_design/Article` design document titled "b
 
 ```javascript
 function(doc){
-  if (doc.couchr_type == 'Article')
+  if (doc.lounge_type == 'Article')
     emit([doc.author, doc.created_at], null)
 }
 ```
@@ -275,12 +424,12 @@ then `Lounge` will create a view "by_comment_count" on your `_design/Article` de
 
 ```javascript
 function(doc){
-  if (doc['couchr_type'] == 'Article')
+  if (doc['lounge_type'] == 'Article')
     emit(doc.comments.length, null)
 }
 ```
 
-As you can see, used within the context of the `Article` class, the `conditions` method on our `ByCommentCount` class returned `doc['couchr_type'] == 'Article'`.
+As you can see, used within the context of the `Article` class, the `conditions` method on our `ByCommentCount` class returned `doc['lounge_type'] == 'Article'`.
 
 
 ### Conditions
@@ -494,3 +643,163 @@ end
 ```
 
 This will generate `map_by_popularity` and `count_by_popularity` methods on the `Article` class. Also notice that we specified `conditions` directly under the `view`, instead of wrapping it in a block under our `map`. 
+
+## Loading data into your models
+
+By default, `Lounge` query proxies will set the `include_docs` query string parameter to true, and it will load the value of the "doc" property in each row of results into it's corresponding model:
+
+For example, given the following `Article` document model definition:
+
+```ruby
+class Article
+  include Lounge::Document
+  map :author
+end
+```
+
+And the following articles:
+
+```ruby
+Article.create :id => "article1", :author => "moonmaster9000", :title => "article 1", :content => "Some long article body"
+Article.create :id => "article2", :author => "moonmaster10000", :title => "article 2", :content => "Another long article body..."
+```
+
+Then calling `Article.map_by_author!` will send a request to `http://localhost:5984/cms/_design/Article/_view/by_author?reduce=false&include_docs=true`. CouchDB will return the following JSON:
+
+```javascript
+{
+  "total_rows": 2,
+  "offset":0,
+  "rows":[
+    {
+      "id":"article1",
+      "key":"moonmaster9000",
+      "value": null,
+      "doc": {
+        "_id" => "article1",
+        "_rev" => "1-jkfldaju328949032849032",
+        "lounge_type" => "Article"
+        "author" => "moonmaster9000",
+        "title" => "article 1",
+        "content" => "Some long article body"
+      }
+    },
+    {
+      "id":"article2",
+      "key":"moonmaster10000",
+      "value": null,
+      "doc": {
+        "_id" => "article2",
+        "_rev" => "1-7373jkjkslfds28949032849032",
+        "lounge_type" => "Article",
+        "author" => "moonmaster10000",
+        "title" => "article 2",
+        "content" => "Another long article body..."
+      }
+    }
+  ]
+}
+```
+
+`Lounge` will then populate two `Article` instances with the data in the "doc" properties in this response, and return those to you. 
+
+Sometimes, however, it's advantageous to create a map that emits some subset of values in your document; if you set `include_docs` to false, then `Lounge` will use the values in your index when loading models:
+
+```ruby
+module Map
+  class Author
+    include Lounge::Map
+
+    def map
+      <<-JS
+      function(doc){
+        if (#{conditions} and typeof doc.author !== undefined){
+          emit(
+            doc.author, 
+            {
+              "title": doc.title,
+              "author": doc.author
+            }
+          )
+        }
+      }
+      JS
+    end
+  end
+end
+```
+
+Next, let's rewrite our Article definition to use this map:
+
+```ruby
+class Article
+  include Lounge::Document
+  include Lounge::Design
+
+  map Map::Author
+end
+```
+
+Now, `http://localhost:5984/cms/_design/Article/_view/by_label?reduce=false&include_docs=true` would return:
+
+```javascript
+{
+  "total_rows": 2,
+  "offset":0,
+  "rows":[
+    {
+      "id":"article1",
+      "key":"moonmaster9000",
+      "value": {
+        "author" => "moonmaster9000",
+        "title" => "article 1"
+      }
+    },
+    {
+      "id":"article2",
+      "key":"moonmaster10000",
+      "value": {
+        "title" => "article 2",
+        "author" => "moonmaster10000"
+      }
+    }
+  ]
+}
+```
+
+Thus, if we `map_by_label` and set `include_docs` to false, `Lounge` will use the values emitted in our index to populate an anonymous document model:
+
+```ruby
+articles = Article.map_by_label.include_docs(true).execute!
+articles.first.title #==> "article 1"
+articles.first.author #==> "moonmaster9000"
+articles.first.content #==> nil
+articles.first.class #==> Lounge::AnonymousDocument
+```
+
+If we include the "loung_type" property in our map values, then `Lounge` will load those values as `Article` instances:
+
+```ruby
+module Map
+  class Author
+    include Lounge::Map
+
+    def map
+      <<-JS
+      function(doc){
+        if (#{conditions} and typeof doc.author !== undefined){
+          emit(
+            doc.author, 
+            {
+              "lounge_type": doc.lounge_type,
+              "title": doc.title,
+              "author": doc.author
+            }
+          )
+        }
+      }
+      JS
+    end
+  end
+end
+```
