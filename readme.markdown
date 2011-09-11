@@ -803,3 +803,10 @@ module Map
   end
 end
 ```
+
+Now:
+
+```ruby
+Article.map_by_label.include_docs(false).first.class #==> Article
+```
+
