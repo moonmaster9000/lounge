@@ -35,7 +35,7 @@ Here's why you should use Lounge:
 
 ## Getting started: configuring database / server connectivity
 
-By default, `Loung` assumes a Rails 3 app, and will detect your app's environment via `Rails.env`. If you're using this in something other than a Rails 3 app,
+By default, `Lounge` assumes a Rails 3 app, and will detect your app's environment via `Rails.env`. If you're using this in something other than a Rails 3 app,
 then simply override the default environment detection:
 
 ```ruby
@@ -374,64 +374,6 @@ You could now find all of the articles created by a specific author within the l
 Article.map_by_author_and_created_at.startkey(["Matt Parker", 1.day.ago]).endkey(["Matt Parker", Time.now]).each {...}
 ```
 
-### Map classes
-
-There will come a time when you need to create a custom map function, when your needs go beyond simply mapping over properties. In that situation, you can create a map class. 
-
-Let's imagine that we want to find all the articles in the system that have more than 10 comments.
-
-```ruby
-class ByCommentCount
-  include Lounge::Map
-
-  def map
-    <<-JS
-    function(doc){
-      if (#{conditions}){
-        emit(doc.comments.length, null)
-      }
-    }
-    JS
-  end
-end
-```
-
-Notice that we included `Lounge::Map` into our class, and that we referenced the `conditions` method inside of our map function.
-
-`ByCommentCount.new.map` would return the following:
-
-```javascript
-function(doc){
-  if (true)
-    emit(doc.comments.length, null)
-}
-```
-
-Basically, because we're not using `ByCommentCount` within the context of a document, the `conditions` method simply defaults to returning `true`.
-
-However, if we use this map class inside of our article model:
-
-```ruby
-class Article
-  include Lounge::Document
-  include Lounge::Design
-
-  map ByCommentCount
-end
-```
-
-then `Lounge` will create a view "by_comment_count" on your `_design/Article` design document with the following map function:
-
-```javascript
-function(doc){
-  if (doc['lounge_type'] == 'Article')
-    emit(doc.comments.length, null)
-}
-```
-
-As you can see, used within the context of the `Article` class, the `conditions` method on our `ByCommentCount` class returned `doc['lounge_type'] == 'Article'`.
-
-
 ### Conditions
 
 Sometimes you'll need to filter your documents by some sort of criteria. In CouchDB, you can accomplish this by creating several views, each with a map that filters documents by the criteria you desire. 
@@ -605,6 +547,64 @@ class Article
 end
 ```
 
+### Map classes
+
+There will come a time when you need to create a custom map function, when your needs go beyond simply mapping over properties. In that situation, you can create a map class. 
+
+Let's imagine that we want to find all the articles in the system that have more than 10 comments.
+
+```ruby
+class ByCommentCount
+  include Lounge::Map
+
+  def map
+    <<-JS
+    function(doc){
+      if (#{conditions}){
+        emit(doc.comments.length, null)
+      }
+    }
+    JS
+  end
+end
+```
+
+Notice that we included `Lounge::Map` into our class, and that we referenced the `conditions` method inside of our map function.
+
+`ByCommentCount.new.map` would return the following:
+
+```javascript
+function(doc){
+  if (true)
+    emit(doc.comments.length, null)
+}
+```
+
+Basically, because we're not using `ByCommentCount` within the context of a document, the `conditions` method simply defaults to returning `true`.
+
+However, if we use this map class inside of our article model:
+
+```ruby
+class Article
+  include Lounge::Document
+  include Lounge::Design
+
+  map ByCommentCount
+end
+```
+
+then `Lounge` will create a view "by_comment_count" on your `_design/Article` design document with the following map function:
+
+```javascript
+function(doc){
+  if (doc['lounge_type'] == 'Article')
+    emit(doc.comments.length, null)
+}
+```
+
+As you can see, used within the context of the `Article` class, the `conditions` method on our `ByCommentCount` class returned `doc['lounge_type'] == 'Article'`.
+
+
 ### Naming your views
 
 It's sometimes advantageous to create a specific name for your views.
@@ -653,6 +653,8 @@ For example, given the following `Article` document model definition:
 ```ruby
 class Article
   include Lounge::Document
+  include Lounge::Design
+
   map :author
 end
 ```
@@ -676,12 +678,12 @@ Then calling `Article.map_by_author!` will send a request to `http://localhost:5
       "key":"moonmaster9000",
       "value": null,
       "doc": {
-        "_id" => "article1",
-        "_rev" => "1-jkfldaju328949032849032",
-        "lounge_type" => "Article"
-        "author" => "moonmaster9000",
-        "title" => "article 1",
-        "content" => "Some long article body"
+        "_id":         "article1",
+        "_rev":        "1-jkfldaju328949032849032",
+        "lounge_type": "Article"
+        "author":      "moonmaster9000",
+        "title":       "article 1",
+        "content":     "Some long article body"
       }
     },
     {
@@ -689,12 +691,12 @@ Then calling `Article.map_by_author!` will send a request to `http://localhost:5
       "key":"moonmaster10000",
       "value": null,
       "doc": {
-        "_id" => "article2",
-        "_rev" => "1-7373jkjkslfds28949032849032",
-        "lounge_type" => "Article",
-        "author" => "moonmaster10000",
-        "title" => "article 2",
-        "content" => "Another long article body..."
+        "_id":         "article2",
+        "_rev":        "1-7373jkjkslfds28949032849032",
+        "lounge_type": "Article",
+        "author":      "moonmaster10000",
+        "title":       "article 2",
+        "content":     "Another long article body..."
       }
     }
   ]
@@ -751,16 +753,16 @@ Now, `http://localhost:5984/cms/_design/Article/_view/by_label?reduce=false&incl
       "id":"article1",
       "key":"moonmaster9000",
       "value": {
-        "author" => "moonmaster9000",
-        "title" => "article 1"
+        "title":  "article 1",
+        "author": "moonmaster9000"
       }
     },
     {
       "id":"article2",
       "key":"moonmaster10000",
       "value": {
-        "title" => "article 2",
-        "author" => "moonmaster10000"
+        "title":  "article 2",
+        "author": "moonmaster10000"
       }
     }
   ]
